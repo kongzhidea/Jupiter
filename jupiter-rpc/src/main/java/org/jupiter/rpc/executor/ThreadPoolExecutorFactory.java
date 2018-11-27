@@ -16,8 +16,8 @@
 
 package org.jupiter.rpc.executor;
 
-import org.jupiter.common.concurrent.NamedThreadFactory;
 import org.jupiter.common.concurrent.RejectedTaskPolicyWithReport;
+import org.jupiter.common.util.SpiMetadata;
 import org.jupiter.common.util.Strings;
 import org.jupiter.common.util.SystemPropertyUtil;
 import org.jupiter.common.util.internal.logging.InternalLogger;
@@ -37,20 +37,35 @@ import static org.jupiter.common.util.StackTraceUtil.stackTrace;
  *
  * @author jiachun.fjc
  */
+@SpiMetadata(name = "threadPool", priority = 1)
 public class ThreadPoolExecutorFactory extends AbstractExecutorFactory {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ThreadPoolExecutorFactory.class);
 
     @Override
-    public Executor newExecutor(Target target, String name) {
-        return new ThreadPoolExecutor(
+    public CloseableExecutor newExecutor(Target target, String name) {
+        final ThreadPoolExecutor executor = new ThreadPoolExecutor(
                 coreWorkers(target),
                 maxWorkers(target),
                 120L,
                 TimeUnit.SECONDS,
                 workQueue(target),
-                new NamedThreadFactory(name),
+                threadFactory(name),
                 createRejectedPolicy(target, name, new RejectedTaskPolicyWithReport(name, "jupiter")));
+
+        return new CloseableExecutor() {
+
+            @Override
+            public void execute(Runnable r) {
+                executor.execute(r);
+            }
+
+            @Override
+            public void shutdown() {
+                logger.warn("ThreadPoolExecutorFactory#{} shutdown.", executor);
+                executor.shutdownNow();
+            }
+        };
     }
 
     private BlockingQueue<Runnable> workQueue(Target target) {

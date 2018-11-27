@@ -17,11 +17,13 @@
 package org.jupiter.registry;
 
 import org.jupiter.common.util.Maps;
-import org.jupiter.common.util.SpiImpl;
+import org.jupiter.common.util.SpiMetadata;
 import org.jupiter.common.util.Strings;
 import org.jupiter.common.util.internal.logging.InternalLogger;
 import org.jupiter.common.util.internal.logging.InternalLoggerFactory;
+import org.jupiter.transport.JConnection;
 import org.jupiter.transport.UnresolvedAddress;
+import org.jupiter.transport.UnresolvedSocketAddress;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentMap;
@@ -37,7 +39,7 @@ import static org.jupiter.common.util.Preconditions.checkNotNull;
  *
  * @author jiachun.fjc
  */
-@SpiImpl(name = "default")
+@SpiMetadata(name = "default")
 public class DefaultRegistryService extends AbstractRegistryService {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultRegistryService.class);
@@ -69,6 +71,7 @@ public class DefaultRegistryService extends AbstractRegistryService {
         getRegisterMetaMap().put(meta, RegisterState.DONE);
     }
 
+    @SuppressWarnings("all")
     @Override
     protected void doUnregister(RegisterMeta meta) {
         Collection<DefaultRegistry> allClients = clients.values();
@@ -95,14 +98,17 @@ public class DefaultRegistryService extends AbstractRegistryService {
             String[] addressStr = Strings.split(s, ':');
             String host = addressStr[0];
             int port = Integer.parseInt(addressStr[1]);
-            UnresolvedAddress address = new UnresolvedAddress(host, port);
+            UnresolvedAddress address = new UnresolvedSocketAddress(host, port);
             DefaultRegistry client = clients.get(address);
             if (client == null) {
                 DefaultRegistry newClient = new DefaultRegistry(this);
                 client = clients.putIfAbsent(address, newClient);
                 if (client == null) {
                     client = newClient;
-                    client.connect(address);
+                    JConnection connection = client.connect(address);
+                    client.connectionManager().manage(connection);
+                } else {
+                    newClient.shutdownGracefully();
                 }
             }
         }

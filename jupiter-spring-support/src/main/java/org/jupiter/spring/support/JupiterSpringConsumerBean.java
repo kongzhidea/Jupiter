@@ -18,9 +18,9 @@ package org.jupiter.spring.support;
 
 import org.jupiter.common.util.Lists;
 import org.jupiter.common.util.Strings;
-import org.jupiter.rpc.ConsumerHook;
 import org.jupiter.rpc.DispatchType;
 import org.jupiter.rpc.InvokeType;
+import org.jupiter.rpc.consumer.ConsumerInterceptor;
 import org.jupiter.rpc.consumer.ProxyFactory;
 import org.jupiter.rpc.consumer.cluster.ClusterInvoker;
 import org.jupiter.rpc.load.balance.LoadBalancerType;
@@ -28,6 +28,7 @@ import org.jupiter.rpc.model.metadata.MethodSpecialConfig;
 import org.jupiter.serialization.SerializerType;
 import org.jupiter.transport.JConnector;
 import org.jupiter.transport.UnresolvedAddress;
+import org.jupiter.transport.UnresolvedSocketAddress;
 import org.jupiter.transport.exception.ConnectFailedException;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InitializingBean;
@@ -51,6 +52,7 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
     private String version;                                     // 服务版本号, 通常在接口不兼容时版本号才需要升级
     private SerializerType serializerType;                      // 序列化/反序列化方式
     private LoadBalancerType loadBalancerType;                  // 软负载均衡类型
+    private String extLoadBalancerName;                         // 扩展软负载均衡唯一标识
     private long waitForAvailableTimeoutMillis = -1;            // 如果大于0, 表示阻塞等待直到连接可用并且该值为等待时间
 
     private transient T proxy;                                  // consumer代理对象
@@ -59,7 +61,7 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
     private DispatchType dispatchType;                          // 派发方式 [单播, 广播]
     private long timeoutMillis;                                 // 调用超时时间设置
     private List<MethodSpecialConfig> methodSpecialConfigs;     // 指定方法的单独配置, 方法参数类型不做区别对待
-    private ConsumerHook[] hooks = ConsumerHook.EMPTY_HOOKS;    // 消费者端钩子函数
+    private ConsumerInterceptor[] consumerInterceptors;         // 消费者端拦截器
     private String providerAddresses;                           // provider地址列表, 逗号分隔(IP直连)
     private ClusterInvoker.Strategy clusterStrategy;            // 集群容错策略
     private int failoverRetries;                                // failover重试次数(只对ClusterInvoker.Strategy.FAIL_OVER有效)
@@ -93,7 +95,7 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
         }
 
         if (loadBalancerType != null) {
-            factory.loadBalancerType(loadBalancerType);
+            factory.loadBalancerType(loadBalancerType, extLoadBalancerName);
         }
 
         if (client.isHasRegistryServer()) {
@@ -107,7 +109,7 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
             }
         } else {
             if (Strings.isBlank(providerAddresses)) {
-                throw new IllegalArgumentException("provider addresses could not be empty");
+                throw new IllegalArgumentException("Provider addresses could not be empty");
             }
 
             String[] array = Strings.split(providerAddresses, ',');
@@ -116,7 +118,7 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
                 String[] addressStr = Strings.split(s, ':');
                 String host = addressStr[0];
                 int port = Integer.parseInt(addressStr[1]);
-                UnresolvedAddress address = new UnresolvedAddress(host, port);
+                UnresolvedAddress address = new UnresolvedSocketAddress(host, port);
                 addresses.add(address);
             }
             factory.addProviderAddress(addresses);
@@ -140,8 +142,13 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
             }
         }
 
-        if (hooks.length > 0) {
-            factory.addHook(hooks);
+        ConsumerInterceptor[] globalConsumerInterceptors = client.getGlobalConsumerInterceptors();
+        if (globalConsumerInterceptors != null && globalConsumerInterceptors.length > 0) {
+            factory.addInterceptor(globalConsumerInterceptors);
+        }
+
+        if (consumerInterceptors != null && consumerInterceptors.length > 0) {
+            factory.addInterceptor(consumerInterceptors);
         }
 
         if (clusterStrategy != null) {
@@ -200,6 +207,14 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
         }
     }
 
+    public String getExtLoadBalancerName() {
+        return extLoadBalancerName;
+    }
+
+    public void setExtLoadBalancerName(String extLoadBalancerName) {
+        this.extLoadBalancerName = extLoadBalancerName;
+    }
+
     public long getWaitForAvailableTimeoutMillis() {
         return waitForAvailableTimeoutMillis;
     }
@@ -246,12 +261,12 @@ public class JupiterSpringConsumerBean<T> implements FactoryBean<T>, Initializin
         this.methodSpecialConfigs = methodSpecialConfigs;
     }
 
-    public ConsumerHook[] getHooks() {
-        return hooks;
+    public ConsumerInterceptor[] getConsumerInterceptors() {
+        return consumerInterceptors;
     }
 
-    public void setHooks(ConsumerHook[] hooks) {
-        this.hooks = hooks;
+    public void setConsumerInterceptors(ConsumerInterceptor[] consumerInterceptors) {
+        this.consumerInterceptors = consumerInterceptors;
     }
 
     public String getProviderAddresses() {

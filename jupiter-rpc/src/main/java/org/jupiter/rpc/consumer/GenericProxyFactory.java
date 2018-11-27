@@ -19,7 +19,6 @@ package org.jupiter.rpc.consumer;
 import org.jupiter.common.util.JConstants;
 import org.jupiter.common.util.Lists;
 import org.jupiter.common.util.Strings;
-import org.jupiter.rpc.ConsumerHook;
 import org.jupiter.rpc.DispatchType;
 import org.jupiter.rpc.InvokeType;
 import org.jupiter.rpc.JClient;
@@ -72,6 +71,8 @@ public class GenericProxyFactory {
     private SerializerType serializerType = SerializerType.getDefault();
     // 软负载均衡类型
     private LoadBalancerType loadBalancerType = LoadBalancerType.getDefault();
+    // 基于ExtSpiLoadBalancerFactory扩展的负载均衡可以选择指定名字, 可以利用名字作为唯一标识扩展多种类型的负载均衡
+    private String extLoadBalancerName;
     // provider地址
     private List<UnresolvedAddress> addresses;
     // 调用方式 [同步, 异步]
@@ -82,8 +83,8 @@ public class GenericProxyFactory {
     private long timeoutMillis;
     // 指定方法的单独配置, 方法参数类型不做区别对待
     private List<MethodSpecialConfig> methodSpecialConfigs;
-    // 消费者端钩子函数
-    private List<ConsumerHook> hooks;
+    // 消费者端拦截器
+    private List<ConsumerInterceptor> interceptors;
     // 集群容错策略
     private ClusterInvoker.Strategy strategy = ClusterInvoker.Strategy.getDefault();
     // failover重试次数
@@ -93,7 +94,7 @@ public class GenericProxyFactory {
         GenericProxyFactory factory = new GenericProxyFactory();
         // 初始化数据
         factory.addresses = Lists.newArrayList();
-        factory.hooks = Lists.newArrayList();
+        factory.interceptors = Lists.newArrayList();
         factory.methodSpecialConfigs = Lists.newArrayList();
 
         return factory;
@@ -137,6 +138,12 @@ public class GenericProxyFactory {
         return this;
     }
 
+    public GenericProxyFactory loadBalancerType(LoadBalancerType loadBalancerType, String extLoadBalancerName) {
+        this.loadBalancerType = loadBalancerType;
+        this.extLoadBalancerName = extLoadBalancerName;
+        return this;
+    }
+
     public GenericProxyFactory addProviderAddress(UnresolvedAddress... addresses) {
         Collections.addAll(this.addresses, addresses);
         return this;
@@ -167,8 +174,8 @@ public class GenericProxyFactory {
         return this;
     }
 
-    public GenericProxyFactory addHook(ConsumerHook... hooks) {
-        Collections.addAll(this.hooks, hooks);
+    public GenericProxyFactory addInterceptor(ConsumerInterceptor... interceptors) {
+        Collections.addAll(this.interceptors, interceptors);
         return this;
     }
 
@@ -206,29 +213,30 @@ public class GenericProxyFactory {
         }
 
         // dispatcher
-        Dispatcher dispatcher = dispatcher(metadata, serializerType)
-                .hooks(hooks)
+        Dispatcher dispatcher = dispatcher()
+                .interceptors(interceptors)
                 .timeoutMillis(timeoutMillis)
                 .methodSpecialConfigs(methodSpecialConfigs);
 
         ClusterStrategyConfig strategyConfig = ClusterStrategyConfig.of(strategy, retries);
         switch (invokeType) {
             case SYNC:
-                return new SyncGenericInvoker(client, dispatcher, strategyConfig, methodSpecialConfigs);
+                return new SyncGenericInvoker(client.appName(), metadata, dispatcher, strategyConfig, methodSpecialConfigs);
             case ASYNC:
-                return new AsyncGenericInvoker(client, dispatcher, strategyConfig, methodSpecialConfigs);
+                return new AsyncGenericInvoker(client.appName(), metadata, dispatcher, strategyConfig, methodSpecialConfigs);
             default:
                 throw reject("invokeType: " + invokeType);
         }
     }
 
-    protected Dispatcher dispatcher(ServiceMetadata metadata, SerializerType serializerType) {
+    protected Dispatcher dispatcher() {
         switch (dispatchType) {
             case ROUND:
                 return new DefaultRoundDispatcher(
-                        LoadBalancerFactory.loadBalancer(loadBalancerType), metadata, serializerType);
+                        client,
+                        LoadBalancerFactory.getInstance(loadBalancerType, extLoadBalancerName), serializerType);
             case BROADCAST:
-                return new DefaultBroadcastDispatcher(metadata, serializerType);
+                return new DefaultBroadcastDispatcher(client, serializerType);
             default:
                 throw reject("dispatchType: " + dispatchType);
         }

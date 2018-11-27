@@ -1,6 +1,8 @@
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/fengjiachun/Jupiter/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](/LICENSE)
 [![Maven Central](https://img.shields.io/maven-central/v/org.jupiter-rpc/jupiter.svg?label=Maven%20Central)](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.jupiter-rpc%22%20AND%20jupiter)
 [![Build Status](https://travis-ci.org/fengjiachun/Jupiter.svg?branch=master)](https://travis-ci.org/fengjiachun/Jupiter)
+[![Code Quality: Java](https://img.shields.io/lgtm/grade/java/g/fengjiachun/Jupiter.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/fengjiachun/Jupiter/context:java)
+[![Total Alerts](https://img.shields.io/lgtm/alerts/g/fengjiachun/Jupiter.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/fengjiachun/Jupiter/alerts)
 
 #### Jupiter:
 - Jupiter是一款性能非常不错的, 轻量级的分布式服务框架
@@ -29,15 +31,26 @@
 
     ---------------------------------------------------------------------------------------
 
+
+#### [RELEASE-NOTES](/docs/release-notes.md)
+
 #### 性能:
 - 小数据包请求(不带业务)在四核刀片服务器上可达到17w+的tps, 详情见 [Benchmark](https://github.com/fengjiachun/Jupiter/wiki/Benchmark)
+- [参考: 多个RPC框架的Benchmark见这里](https://github.com/hank-whu/rpc-benchmark)
 
 #### 文档:
+- [High performance RPC with netty](/docs/static_files/high_performance_rpc_with_netty.md)
 - [Wiki](https://github.com/fengjiachun/Jupiter/wiki)
+- [其他文档](https://github.com/fengjiachun/doc/tree/master/jupiter)
+- [发展路线](https://github.com/fengjiachun/Jupiter/wiki/RoadMap)
 
+#### 一次RPC调用:
 
+<img src="docs/static_files/jupiter-rpc.png" width="1600"/>
 
-#### 快速入门:
+<p align="right">感谢 @远墨 提供的图</p>
+
+#### 快速开始:
 
 ##### 工程依赖:
 + JDK1.7或更高版本
@@ -47,10 +60,6 @@
 ##### [最新版本Maven中心仓库下载](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.jupiter-rpc%22%20AND%20jupiter)
 ##### Maven依赖:
 ```xml
-<properties>
-    <jupiter.version>1.2.11</jupiter.version>
-</properties>
-
 <dependency>
     <groupId>org.jupiter-rpc</groupId>
     <artifactId>jupiter-all</artifactId>
@@ -179,7 +188,7 @@ public class HelloJupiterClient {
 [Server/Client代码示例](https://github.com/fengjiachun/Jupiter/tree/master/jupiter-example/src/main/java/org/jupiter/example/round)
 
 ##### 结合Spring使用示例:
-###### 1. [Server端配置](https://github.com/fengjiachun/Jupiter/blob/master/jupiter-example/src/main/resources/spring-provider.xml):
+###### 1. [Server端配置](/jupiter-example/src/main/resources/spring-provider.xml):
 
 ```xml
 <jupiter:server id="jupiterServer" registryType="default"> <!-- registryType="zookeeper" 代表使用zk作为注册中心 -->
@@ -194,7 +203,7 @@ public class HelloJupiterClient {
 </jupiter:provider>
 ```
 
-###### 2. [Client端配置](https://github.com/fengjiachun/Jupiter/blob/master/jupiter-example/src/main/resources/spring-consumer.xml):
+###### 2. [Client端配置](/jupiter-example/src/main/resources/spring-consumer.xml):
 
 ```xml
 <jupiter:client id="jupiterClient" registryType="default"> <!-- registryType="zookeeper" 代表使用zk作为注册中心 -->
@@ -224,4 +233,3 @@ public class HelloJupiterClient {
 #### 其他
 - qq交流群: 397633380
 - 邮件交流: jiachun_fjc@163.com
-

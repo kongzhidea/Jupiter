@@ -17,15 +17,12 @@
 package org.jupiter.transport.netty;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import io.netty.util.internal.PlatformDependent;
 import org.jupiter.common.concurrent.NamedThreadFactory;
 import org.jupiter.common.util.JConstants;
 import org.jupiter.transport.JAcceptor;
@@ -49,7 +46,7 @@ public abstract class NettyAcceptor implements JAcceptor {
     protected final Protocol protocol;
     protected final SocketAddress localAddress;
 
-    protected final HashedWheelTimer timer = new HashedWheelTimer(new NamedThreadFactory("acceptor.timer"));
+    protected final HashedWheelTimer timer = new HashedWheelTimer(new NamedThreadFactory("acceptor.timer", true));
 
     private final int nBosses;
     private final int nWorkers;
@@ -58,7 +55,7 @@ public abstract class NettyAcceptor implements JAcceptor {
     private EventLoopGroup boss;
     private EventLoopGroup worker;
 
-    protected volatile ByteBufAllocator allocator;
+    private ProviderProcessor processor;
 
     public NettyAcceptor(Protocol protocol, SocketAddress localAddress) {
         this(protocol, localAddress, JConstants.AVAILABLE_PROCESSORS << 1);
@@ -90,8 +87,6 @@ public abstract class NettyAcceptor implements JAcceptor {
         // child options
         JConfig child = configGroup().child();
         child.setOption(JOption.IO_RATIO, 100);
-        child.setOption(JOption.PREFER_DIRECT, true);
-        child.setOption(JOption.USE_POOLED_ALLOCATOR, true);
     }
 
     @Override
@@ -113,14 +108,23 @@ public abstract class NettyAcceptor implements JAcceptor {
     }
 
     @Override
+    public ProviderProcessor processor() {
+        return processor;
+    }
+
+    @Override
     public void withProcessor(ProviderProcessor processor) {
-        // the default implementation does nothing
+        setProcessor(this.processor = processor);
     }
 
     @Override
     public void shutdownGracefully() {
-        boss.shutdownGracefully();
-        worker.shutdownGracefully();
+        boss.shutdownGracefully().syncUninterruptibly();
+        worker.shutdownGracefully().syncUninterruptibly();
+        timer.stop();
+        if (processor != null) {
+            processor.shutdown();
+        }
     }
 
     protected ThreadFactory bossThreadFactory(String name) {
@@ -137,22 +141,7 @@ public abstract class NettyAcceptor implements JAcceptor {
 
         setIoRatio(parent.getOption(JOption.IO_RATIO), child.getOption(JOption.IO_RATIO));
 
-        boolean direct = child.getOption(JOption.PREFER_DIRECT);
-        if (child.getOption(JOption.USE_POOLED_ALLOCATOR)) {
-            if (direct) {
-                allocator = new PooledByteBufAllocator(PlatformDependent.directBufferPreferred());
-            } else {
-                allocator = new PooledByteBufAllocator(false);
-            }
-        } else {
-            if (direct) {
-                allocator = new UnpooledByteBufAllocator(PlatformDependent.directBufferPreferred());
-            } else {
-                allocator = new UnpooledByteBufAllocator(false);
-            }
-        }
-        bootstrap.childOption(ChannelOption.ALLOCATOR, allocator)
-                .childOption(ChannelOption.MESSAGE_SIZE_ESTIMATOR, JMessageSizeEstimator.DEFAULT);
+        bootstrap.childOption(ChannelOption.MESSAGE_SIZE_ESTIMATOR, JMessageSizeEstimator.DEFAULT);
     }
 
     /**
@@ -176,6 +165,27 @@ public abstract class NettyAcceptor implements JAcceptor {
      */
     protected EventLoopGroup worker() {
         return worker;
+    }
+
+    /**
+     * Sets provider's processor.
+     */
+    @SuppressWarnings("unused")
+    protected void setProcessor(ProviderProcessor processor) {
+        // the default implementation does nothing
+    }
+
+    /**
+     * Create a WriteBufferWaterMark is used to set low water mark and high water mark for the write buffer.
+     */
+    protected WriteBufferWaterMark createWriteBufferWaterMark(int bufLowWaterMark, int bufHighWaterMark) {
+        WriteBufferWaterMark waterMark;
+        if (bufLowWaterMark >= 0 && bufHighWaterMark > 0) {
+            waterMark = new WriteBufferWaterMark(bufLowWaterMark, bufHighWaterMark);
+        } else {
+            waterMark = new WriteBufferWaterMark(512 * 1024, 1024 * 1024);
+        }
+        return waterMark;
     }
 
     /**

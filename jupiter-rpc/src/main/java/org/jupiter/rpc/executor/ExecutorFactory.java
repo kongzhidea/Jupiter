@@ -19,8 +19,6 @@ package org.jupiter.rpc.executor;
 import org.jupiter.rpc.consumer.processor.ConsumerExecutorFactory;
 import org.jupiter.rpc.provider.processor.ProviderExecutorFactory;
 
-import java.util.concurrent.Executor;
-
 /**
  * Executor factory.
  *
@@ -31,7 +29,7 @@ import java.util.concurrent.Executor;
  */
 public interface ExecutorFactory extends ConsumerExecutorFactory, ProviderExecutorFactory {
 
-    Executor newExecutor(Target target, String name);
+    CloseableExecutor newExecutor(Target target, String name);
 
     enum Target {
         CONSUMER,
@@ -50,4 +48,5 @@ public interface ExecutorFactory extends ConsumerExecutorFactory, ProviderExecut
     String PROVIDER_DISRUPTOR_WAIT_STRATEGY_TYPE    = "jupiter.executor.factory.provider.disruptor.wait.strategy.type";
     String CONSUMER_THREAD_POOL_REJECTED_HANDLER    = "jupiter.executor.factory.consumer.thread.pool.rejected.handler";
     String PROVIDER_THREAD_POOL_REJECTED_HANDLER    = "jupiter.executor.factory.provider.thread.pool.rejected.handler";
+    String EXECUTOR_AFFINITY_THREAD                 = "jupiter.executor.factory.affinity.thread";
 }

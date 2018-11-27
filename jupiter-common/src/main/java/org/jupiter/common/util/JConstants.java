@@ -82,7 +82,7 @@ public final class JConstants {
 
     /** Suggest that the count of connections **/
     public static final int SUGGESTED_CONNECTION_COUNT =
-            SystemPropertyUtil.getInt("jupiter.rpc.suggest.connection.count", AVAILABLE_PROCESSORS);
+            SystemPropertyUtil.getInt("jupiter.rpc.suggest.connection.count", Math.min(AVAILABLE_PROCESSORS, 4));
 
     /** Metrics csv reporter */
     public static final boolean METRIC_CSV_REPORTER =
@@ -93,4 +93,6 @@ public final class JConstants {
     /** Metrics reporter period */
     public static final int METRIC_REPORT_PERIOD =
             SystemPropertyUtil.getInt("jupiter.metric.report.period", 15);
+
+    private JConstants() {}
 }

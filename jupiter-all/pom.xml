@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.jupiter-rpc</groupId>
         <artifactId>jupiter</artifactId>
-        <version>1.2.11</version>
+        <version>1.2.26</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -114,6 +114,14 @@
         </dependency>
         <!-- ### serialization impl: end -->
 
+        <!-- ### tracer: begin -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jupiter-extension-tracing</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- ### tracer: end -->
+
         <!-- ### transport impl: begin -->
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -179,16 +187,8 @@
         <!-- # common dependency: begin -->
         <!-- ## required dependency: begin -->
         <dependency>
-            <groupId>org.objenesis</groupId>
-            <artifactId>objenesis</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.javassist</groupId>
-            <artifactId>javassist</artifactId>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
@@ -276,6 +276,17 @@
         </dependency>
         <!-- ### spring dependency: end -->
 
+        <!-- ### open tracing: begin -->
+        <dependency>
+            <groupId>io.opentracing</groupId>
+            <artifactId>opentracing-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentracing</groupId>
+            <artifactId>opentracing-noop</artifactId>
+        </dependency>
+        <!-- ### open tracing: end -->
+
         <!-- ### benchmark: begin -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
@@ -326,6 +337,7 @@
                     <includeDependencySources>true</includeDependencySources>
                     <dependencySourceIncludes>
                         <dependencySourceInclude>${project.groupId}:jupiter-common</dependencySourceInclude>
+                        <dependencySourceInclude>${project.groupId}:jupiter-extension</dependencySourceInclude>
                         <dependencySourceInclude>${project.groupId}:jupiter-flightexec</dependencySourceInclude>
                         <dependencySourceInclude>${project.groupId}:jupiter-monitor</dependencySourceInclude>
                         <dependencySourceInclude>${project.groupId}:jupiter-registry</dependencySourceInclude>

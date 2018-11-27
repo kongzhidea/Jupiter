@@ -19,16 +19,15 @@ package org.jupiter.rpc.consumer.cluster;
 import org.jupiter.common.util.Reflects;
 import org.jupiter.common.util.internal.logging.InternalLogger;
 import org.jupiter.common.util.internal.logging.InternalLoggerFactory;
-import org.jupiter.rpc.JClient;
 import org.jupiter.rpc.JListener;
+import org.jupiter.rpc.JRequest;
 import org.jupiter.rpc.consumer.dispatcher.DefaultRoundDispatcher;
 import org.jupiter.rpc.consumer.dispatcher.Dispatcher;
+import org.jupiter.rpc.consumer.future.DefaultInvokeFuture;
 import org.jupiter.rpc.consumer.future.FailOverInvokeFuture;
 import org.jupiter.rpc.consumer.future.InvokeFuture;
-import org.jupiter.rpc.exception.JupiterBadRequestException;
-import org.jupiter.rpc.exception.JupiterBizException;
-import org.jupiter.rpc.exception.JupiterRemoteException;
-import org.jupiter.rpc.exception.JupiterSerializationException;
+import org.jupiter.rpc.model.metadata.MessageWrapper;
+import org.jupiter.transport.channel.JChannel;
 
 import static org.jupiter.common.util.Preconditions.checkArgument;
 import static org.jupiter.common.util.StackTraceUtil.stackTrace;
@@ -47,20 +46,21 @@ import static org.jupiter.common.util.StackTraceUtil.stackTrace;
  *
  * @author jiachun.fjc
  */
-public class FailOverClusterInvoker extends AbstractClusterInvoker {
+public class FailOverClusterInvoker implements ClusterInvoker {
+    // 不要在意FailOver的'O'为什么是大写, 因为要和FailFast, FailSafe等单词看着风格一样我心里才舒服
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(FailOverClusterInvoker.class);
 
+    private final Dispatcher dispatcher;
     private final int retries; // 重试次数, 不包含第一次
 
-    public FailOverClusterInvoker(JClient client, Dispatcher dispatcher, int retries) {
-        super(client, dispatcher);
-
+    public FailOverClusterInvoker(Dispatcher dispatcher, int retries) {
         checkArgument(
                 dispatcher instanceof DefaultRoundDispatcher,
                 Reflects.simpleClassName(dispatcher) + " is unsupported [FailOverClusterInvoker]"
         );
 
+        this.dispatcher = dispatcher;
         if (retries >= 0) {
             this.retries = retries;
         } else {
@@ -74,56 +74,56 @@ public class FailOverClusterInvoker extends AbstractClusterInvoker {
     }
 
     @Override
-    public <T> InvokeFuture<T> invoke(String methodName, Object[] args, Class<T> returnType) throws Exception {
+    public <T> InvokeFuture<T> invoke(JRequest request, Class<T> returnType) throws Exception {
         FailOverInvokeFuture<T> future = FailOverInvokeFuture.with(returnType);
 
         int tryCount = retries + 1;
-        invoke0(methodName, args, returnType, tryCount, future, null);
+        invoke0(request, returnType, tryCount, future, null);
 
         return future;
     }
 
-    private <T> void invoke0(final String methodName,
-                             final Object[] args,
+    private <T> void invoke0(final JRequest request,
                              final Class<T> returnType,
                              final int tryCount,
-                             final FailOverInvokeFuture<T> future,
+                             final FailOverInvokeFuture<T> failOverFuture,
                              Throwable lastCause) {
 
-        if (tryCount > 0 && isFailoverNeeded(lastCause)) {
-            InvokeFuture<T> f = dispatcher.dispatch(client, methodName, args, returnType);
+        if (tryCount > 0) {
+            final InvokeFuture<T> future = dispatcher.dispatch(request, returnType);
 
-            f.addListener(new JListener<T>() {
+            future.addListener(new JListener<T>() {
 
                 @Override
                 public void complete(T result) {
-                    future.setSuccess(result);
+                    failOverFuture.setSuccess(result);
                 }
 
                 @Override
                 public void failure(Throwable cause) {
                     if (logger.isWarnEnabled()) {
-                        logger.warn("[Fail-over] retry, [{}] attempts left, [method: {}], [metadata: {}], {}.",
+                        MessageWrapper message = request.message();
+                        JChannel channel =
+                                future instanceof DefaultInvokeFuture ? ((DefaultInvokeFuture) future).channel() : null;
+
+                        logger.warn("[{}]: [Fail-over] retry, [{}] attempts left, [method: {}], [metadata: {}], {}.",
+                                channel,
                                 tryCount - 1,
-                                methodName,
-                                dispatcher.metadata(),
+                                message.getMethodName(),
+                                message.getMetadata(),
                                 stackTrace(cause));
                     }
 
-                    invoke0(methodName, args, returnType, tryCount - 1, future, cause);
+                    // Note: Failover uses the same invokeId for each call.
+                    //
+                    // So if the last call triggered the next call because of a timeout,
+                    // and then the previous call returned successfully before the next call returns,
+                    // will uses the previous call result
+                    invoke0(request, returnType, tryCount - 1, failOverFuture, cause);
                 }
             });
         } else {
-            future.setFailure(lastCause);
+            failOverFuture.setFailure(lastCause);
         }
-    }
-
-    private static boolean isFailoverNeeded(Throwable cause) {
-        return cause == null
-                || cause instanceof JupiterRemoteException
-                    && !(cause instanceof JupiterBadRequestException)
-                    && !(cause instanceof JupiterBizException)
-                    && !(cause instanceof JupiterSerializationException);
-
     }
 }

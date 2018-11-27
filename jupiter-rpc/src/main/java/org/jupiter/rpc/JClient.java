@@ -57,7 +57,7 @@ public interface JClient extends Registry {
     RegistryService registryService();
 
     /**
-     * 从本地容器查找服务信息.
+     * 查找服务信息.
      */
     Collection<RegisterMeta> lookup(Directory directory);
 
@@ -75,6 +75,16 @@ public interface JClient extends Registry {
      * 设置对指定服务由jupiter自动管理连接.
      */
     JConnector.ConnectionWatcher watchConnections(Directory directory);
+
+    /**
+     * 阻塞等待一直到该服务有可用连接或者超时.
+     */
+    boolean awaitConnections(Class<?> interfaceClass, long timeoutMillis);
+
+    /**
+     * 阻塞等待一直到该服务有可用连接或者超时.
+     */
+    boolean awaitConnections(Class<?> interfaceClass, String version, long timeoutMillis);
 
     /**
      * 阻塞等待一直到该服务有可用连接或者超时.

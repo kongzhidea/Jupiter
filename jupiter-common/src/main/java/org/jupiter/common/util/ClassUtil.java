@@ -19,42 +19,49 @@ package org.jupiter.common.util;
 import org.jupiter.common.util.internal.logging.InternalLogger;
 import org.jupiter.common.util.internal.logging.InternalLoggerFactory;
 
+import static org.jupiter.common.util.StackTraceUtil.*;
+
 /**
  * jupiter
  * org.jupiter.common.util
  *
  * @author jiachun.fjc
  */
-public class ClassUtil {
+public final class ClassUtil {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ClassUtil.class);
 
     /**
-     * 提前加载并初始化指定的类, 某些平台下某些类的静态块里面的代码执行实在是太慢了:(
+     * 提前加载并初始化指定的类, 某些平台下某些类的静态块里面的代码执行执行的贼鸡儿慢
      *
      * @param className         类的全限定名称
      * @param tolerableMillis   超过这个时间打印警告日志
      */
-    public static void classInitialize(String className, long tolerableMillis) {
+    public static void initializeClass(String className, long tolerableMillis) {
         long start = System.currentTimeMillis();
         try {
             Class.forName(className);
         } catch (Throwable t) {
-            logger.warn("Failed to load class [{}] {}.", className, t);
+            if (logger.isWarnEnabled()) {
+                logger.warn("Failed to load class [{}] {}.", className, stackTrace(t));
+            }
         }
 
-        long elapsed = System.currentTimeMillis() - start;
-        if (elapsed > tolerableMillis) {
-            logger.warn("{}.<clinit> elapsed: {} millis.", className, elapsed);
+        long duration = System.currentTimeMillis() - start;
+        if (duration > tolerableMillis) {
+            logger.warn("{}.<clinit> duration: {} millis.", className, duration);
         }
     }
 
-    public static void classCheck(String className) {
+    public static void checkClass(String className, String message) {
         try {
             Class.forName(className);
         } catch (Throwable t) {
-            logger.error("Failed to load class [{}] {}.", className, t);
-            ExceptionUtil.throwException(t);
+            throw new RuntimeException(message, t);
         }
     }
+
+    public static <T> void forClass(@SuppressWarnings("unused") Class<T> clazz) {}
+
+    private ClassUtil() {}
 }

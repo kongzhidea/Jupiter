@@ -77,14 +77,14 @@ public class TaskDispatcher implements Dispatcher<Runnable>, Executor {
     };
 
     private final Disruptor<MessageEvent<Runnable>> disruptor;
-    private final Executor reserveExecutor;
+    private final ExecutorService reserveExecutor;
 
-    public TaskDispatcher(int numWorkers) {
-        this(numWorkers, "task.dispatcher", BUFFER_SIZE, 0, WaitStrategyType.BLOCKING_WAIT, null);
+    public TaskDispatcher(int numWorkers, ThreadFactory threadFactory) {
+        this(numWorkers, threadFactory, BUFFER_SIZE, 0, WaitStrategyType.BLOCKING_WAIT, null);
     }
 
     public TaskDispatcher(int numWorkers,
-                          String threadFactoryName,
+                          ThreadFactory threadFactory,
                           int bufSize,
                           int numReserveWorkers,
                           WaitStrategyType waitStrategyType,
@@ -132,7 +132,7 @@ public class TaskDispatcher implements Dispatcher<Runnable>, Executor {
                 waitStrategy = new LiteTimeoutBlockingWaitStrategy(1000, TimeUnit.MILLISECONDS);
                 break;
             case PHASED_BACK_OFF_WAIT:
-                waitStrategy = PhasedBackoffWaitStrategy.withLiteLock(1, 1, TimeUnit.MILLISECONDS);
+                waitStrategy = PhasedBackoffWaitStrategy.withLiteLock(1000, 1000, TimeUnit.NANOSECONDS);
                 break;
             case SLEEPING_WAIT:
                 waitStrategy = new SleepingWaitStrategy();
@@ -147,7 +147,9 @@ public class TaskDispatcher implements Dispatcher<Runnable>, Executor {
                 throw new UnsupportedOperationException(waitStrategyType.toString());
         }
 
-        ThreadFactory threadFactory = new NamedThreadFactory(threadFactoryName);
+        if (threadFactory == null) {
+            threadFactory = new NamedThreadFactory("disruptor.processor");
+        }
         Disruptor<MessageEvent<Runnable>> dr =
                 new Disruptor<>(eventFactory, bufSize, threadFactory, ProducerType.MULTI, waitStrategy);
         dr.setDefaultExceptionHandler(new LoggingExceptionHandler());
@@ -191,7 +193,7 @@ public class TaskDispatcher implements Dispatcher<Runnable>, Executor {
             if (reserveExecutor != null) {
                 reserveExecutor.execute(message);
             } else {
-                throw new RejectedExecutionException("ring buffer is full");
+                throw new RejectedExecutionException("Ring buffer is full");
             }
         }
     }
@@ -199,5 +201,8 @@ public class TaskDispatcher implements Dispatcher<Runnable>, Executor {
     @Override
     public void shutdown() {
         disruptor.shutdown();
+        if (reserveExecutor != null) {
+            reserveExecutor.shutdownNow();
+        }
     }
 }

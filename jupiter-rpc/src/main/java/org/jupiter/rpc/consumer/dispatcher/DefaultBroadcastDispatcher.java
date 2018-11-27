@@ -16,7 +16,6 @@
 
 package org.jupiter.rpc.consumer.dispatcher;
 
-import org.jupiter.rpc.ConsumerHook;
 import org.jupiter.rpc.DispatchType;
 import org.jupiter.rpc.JClient;
 import org.jupiter.rpc.JRequest;
@@ -24,9 +23,10 @@ import org.jupiter.rpc.consumer.future.DefaultInvokeFuture;
 import org.jupiter.rpc.consumer.future.DefaultInvokeFutureGroup;
 import org.jupiter.rpc.consumer.future.InvokeFuture;
 import org.jupiter.rpc.model.metadata.MessageWrapper;
-import org.jupiter.rpc.model.metadata.ServiceMetadata;
 import org.jupiter.serialization.Serializer;
 import org.jupiter.serialization.SerializerType;
+import org.jupiter.serialization.io.OutputBuf;
+import org.jupiter.transport.CodecConfig;
 import org.jupiter.transport.channel.JChannel;
 import org.jupiter.transport.channel.JChannelGroup;
 
@@ -40,27 +40,18 @@ import org.jupiter.transport.channel.JChannelGroup;
  */
 public class DefaultBroadcastDispatcher extends AbstractDispatcher {
 
-    public DefaultBroadcastDispatcher(ServiceMetadata metadata, SerializerType serializerType) {
-        super(metadata, serializerType);
+    public DefaultBroadcastDispatcher(JClient client, SerializerType serializerType) {
+        super(client, serializerType);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public <T> InvokeFuture<T> dispatch(JClient client, String methodName, Object[] args, Class<T> returnType) {
+    public <T> InvokeFuture<T> dispatch(JRequest request, Class<T> returnType) {
         // stack copy
-        final ServiceMetadata _metadata = metadata();
         final Serializer _serializer = serializer();
+        final MessageWrapper message = request.message();
 
-        MessageWrapper message = new MessageWrapper(_metadata);
-        message.setAppName(client.appName());
-        message.setMethodName(methodName);
-        // 不需要方法参数类型, 服务端会根据args具体类型按照JLS规则动态dispatch
-        message.setArgs(args);
-
-        JChannelGroup[] groups = client
-                .connector()
-                .directory(_metadata)
-                .snapshot();
+        JChannelGroup[] groups = groups(message.getMetadata());
         JChannel[] channels = new JChannel[groups.length];
         for (int i = 0; i < groups.length; i++) {
             channels[i] = groups[i].next();
@@ -68,22 +59,21 @@ public class DefaultBroadcastDispatcher extends AbstractDispatcher {
 
         byte s_code = _serializer.code();
         // 在业务线程中序列化, 减轻IO线程负担
-        byte[] bytes = _serializer.writeObject(message);
+        boolean isLowCopy = CodecConfig.isCodecLowCopy();
+        if (!isLowCopy) {
+            byte[] bytes = _serializer.writeObject(message);
+            request.bytes(s_code, bytes);
+        }
 
-        JRequest request = new JRequest();
-        request.message(message);
-        request.bytes(s_code, bytes);
-
-        long invokeId = request.invokeId();
-        ConsumerHook[] hooks = hooks();
         InvokeFuture<T>[] futures = new DefaultInvokeFuture[channels.length];
-        long timeoutMillis = getMethodSpecialTimeoutMillis(methodName);
         for (int i = 0; i < channels.length; i++) {
-            JChannel ch = channels[i];
-            DefaultInvokeFuture<T> future = DefaultInvokeFuture
-                    .with(invokeId, ch, returnType, timeoutMillis, DispatchType.BROADCAST)
-                    .hooks(hooks);
-            futures[i] = write(ch, request, future, DispatchType.BROADCAST);
+            JChannel channel = channels[i];
+            if (isLowCopy) {
+                OutputBuf outputBuf =
+                        _serializer.writeObject(channel.allocOutputBuf(), message);
+                request.outputBuf(s_code, outputBuf);
+            }
+            futures[i] = write(channel, request, returnType, DispatchType.BROADCAST);
         }
 
         return DefaultInvokeFutureGroup.with(futures);

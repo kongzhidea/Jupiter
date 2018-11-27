@@ -79,17 +79,17 @@ public final class Signal extends Exception implements Constant<Signal> {
      */
     public void expect(Signal signal) {
         if (this != signal) {
-            throw new IllegalStateException("unexpected signal: " + signal);
+            throw new IllegalStateException("Unexpected signal: " + signal);
         }
     }
 
     @Override
-    public Throwable initCause(Throwable cause) {
+    public Throwable initCause(Throwable cause) { // lgtm [java/non-sync-override]
         return this;
     }
 
     @Override
-    public Throwable fillInStackTrace() {
+    public Throwable fillInStackTrace() { // lgtm [java/non-sync-override]
         return this;
     }
 

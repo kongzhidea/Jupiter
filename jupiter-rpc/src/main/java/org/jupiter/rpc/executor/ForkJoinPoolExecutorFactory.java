@@ -16,11 +16,11 @@
 
 package org.jupiter.rpc.executor;
 
+import org.jupiter.common.util.SpiMetadata;
 import org.jupiter.common.util.internal.InternalForkJoinWorkerThread;
 import org.jupiter.common.util.internal.logging.InternalLogger;
 import org.jupiter.common.util.internal.logging.InternalLoggerFactory;
 
-import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,16 +35,31 @@ import static org.jupiter.common.util.StackTraceUtil.stackTrace;
  *
  * @author jiachun.fjc
  */
+@SpiMetadata(name = "forkJoin")
 public class ForkJoinPoolExecutorFactory extends AbstractExecutorFactory {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ForkJoinPoolExecutorFactory.class);
 
     @Override
-    public Executor newExecutor(Target target, String name) {
-        return new ForkJoinPool(
+    public CloseableExecutor newExecutor(Target target, String name) {
+        final ForkJoinPool executor = new ForkJoinPool(
                 coreWorkers(target),
                 new DefaultForkJoinWorkerThreadFactory(name),
                 new DefaultUncaughtExceptionHandler(), true);
+
+        return new CloseableExecutor() {
+
+            @Override
+            public void execute(Runnable r) {
+                executor.execute(r);
+            }
+
+            @Override
+            public void shutdown() {
+                logger.warn("ForkJoinPoolExecutorFactory#{} shutdown.", executor);
+                executor.shutdownNow();
+            }
+        };
     }
 
     private static final class DefaultForkJoinWorkerThreadFactory implements ForkJoinPool.ForkJoinWorkerThreadFactory {
